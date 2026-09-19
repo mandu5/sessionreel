@@ -13,16 +13,24 @@ that log, finds the story (most often: a test or build goes red, edits fix it, i
 ships), redacts secrets, and renders a 30–60 second video with Pillow + ffmpeg. No network, no
 model call, no upload.
 
-Run it with `uvx sessionreel …` (or `sessionreel …` if installed). If `uvx` cannot find the
-package, use `uvx --from git+https://github.com/mandu5/sessionreel sessionreel …`.
+Run it as `uvx sessionreel@0.1.0 …` (pinned; or `sessionreel …` if the user installed it). If PyPI
+is unreachable, use `uvx --from git+https://github.com/mandu5/sessionreel@v0.1.0 sessionreel …`.
+Never run an unpinned package name from this skill.
+
+Use one scratch directory for the whole run, outside the repository:
+```
+SR_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sessionreel.XXXXXX")"
+```
 
 ## Steps
 
 1. **Plan.** From the project directory:
    ```
-   uvx sessionreel plan -o "$TMPDIR/sessionreel-storyboard.json"
+   uvx sessionreel@0.1.0 plan -o "$SR_DIR/storyboard.json" [--lang ko] [--whole] [--project NAME] [--no-branch]
    ```
-   With no session argument it picks the newest session for the current directory — this one.
+   With no session argument it uses `CLAUDE_CODE_SESSION_ID` — this session — and falls back to
+   the newest session for this directory or its parents. It prints the chosen session id, the
+   ask it found, the story and how many items it redacted. Tell the user which session it is.
    It prints the story (`title → prompt → terminal → diff → terminal → ship → stats → end`) and
    how many items were redacted. If the user named another session, pass its id or path.
 
@@ -35,18 +43,21 @@ package, use `uvx --from git+https://github.com/mandu5/sessionreel sessionreel �
      that scene or its `fact`. Never invent a number, a result, a speed-up or a user impact;
    - keep the red scene's failure count and the green scene's pass count exactly as given;
    - do not add names, emails, URLs, paths or anything the redactor removed.
-   Leave `title`, `stats` and `end` scenes, `seconds`, and every other field unchanged. Write the
-   file back.
+   Leave `title`, `stats` and `end` scenes, `seconds`, `fact`, and every other field unchanged.
+   Write the file back.
 
 3. **Render.**
    ```
-   uvx sessionreel render "$TMPDIR/sessionreel-storyboard.json" -o sessionreel.mp4 $ARGUMENTS
+   uvx sessionreel@0.1.0 render "$SR_DIR/storyboard.json" -o "$SR_DIR/sessionreel.mp4" [--format …] [--voice] [--gif]
    ```
+   Keep the video out of the repository so a later `git add -A` cannot commit it. The renderer
+   re-runs redaction over the edited storyboard and prints a warning for any caption number it
+   cannot find in that scene's data — if it warns, fix the caption and render again.
    Formats: `square` (default, feeds), `wide` (1920×1080), `tall` (1080×1920). `--voice` adds
    narration with the OS voice; `--gif` also writes a GIF. Rendering takes roughly as long as the
    video.
 
-4. **Report** the output path, the video length, and the redaction count from step 1. Suggest the
+4. **Report** the output path (in `$SR_DIR`), the video length, and the redaction count from step 1. Suggest the
    user watch it before posting; say plainly that redaction is pattern-based and a human should
    look before anything goes public.
 

@@ -78,3 +78,72 @@ def test_every_string_field_is_redacted(log, tmp_path):
     s = redact_session(ingest.load(log.write(tmp_path / "r.jsonl")), home="/x")
     blob = repr([(e.text, e.input, e.output, [h.lines for h in e.hunks]) for e in s.events])
     assert key not in blob
+
+
+# ---- regressions from the pre-release review ------------------------------------------------
+
+REVIEW_LEAKS = [
+    ('{"api_key": "abcd1234efgh5678"}', "abcd1234efgh5678"),
+    ('{"AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}', "wJalrXUtnFEMI"),
+    ("sk_live_51H8abcdefghijklmnop", "51H8abcdefgh"),
+    ("STRIPE_KEY=rk_live_abcdefghijk", "abcdefghijk"),
+    ("mysql -uroot -pS3cretPw db", "S3cretPw"),
+    ("curl -u admin:S3cretPw https://x", "S3cretPw"),
+    ("tool --password S3cretPw", "S3cretPw"),
+    ("Authorization: Basic dXNlcjpwYXNzd29yZA==", "dXNlcjpw"),
+    ("Authorization: Bearer abc/def+ghijklmnopqrstuv", "ghijklmnop"),
+    ("npm_abcdefghijklmnopqrstuvwxyz0123456789", "abcdefghijklmnop"),
+    ("pypi-AgEIcHlwaS5vcmcCJGFiY2RlZmdoaWprbG1ub3A", "AgEIcHlwaS5v"),
+    ("glpat-abcdefghijklmnopqrst", "abcdefghijklmnop"),
+    ("SG.abcdefghijklmnopqr.abcdefghijklmnopqrstuvwxyz", "abcdefghijklmnopqr"),
+    ("https://hooks.slack.com/services/T000/B000/XXXXYYYYZZZZ", "XXXXYYYYZZZZ"),
+    ("https://discord.com/api/webhooks/123/abcDEF", "abcDEF"),
+    ("https://api.telegram.org/bot123456:ABCdefGHI/sendMessage", "ABCdefGHI"),
+    ("DefaultEndpointsProtocol=https;AccountKey=abcdEFGH1234ijklMNOP==;", "abcdEFGH1234"),
+    ("SESSION_SIGNING=0123456789abcdef0123456789abcdef", "0123456789abcdef0123"),
+    ("export X=Zm9vYmFyQmF6UXV4MTIzNDU2Nzg5MEFiQ2RFZg", "Zm9vYmFyQmF6UXV4"),  # high-entropy fallback
+]
+
+
+@pytest.mark.parametrize("text,secret", REVIEW_LEAKS)
+def test_review_leaks_are_closed(text, secret):
+    assert secret not in Redactor(home="/nonexistent", hostname="zz").text(text)
+
+
+@pytest.mark.parametrize("text", [
+    "author: Youngmin Ko",
+    "Co-Authored-By: Claude Fable 5.1",
+    'const password = request.form["password"]',
+    "commit 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",  # git SHAs are not secrets
+    "mkdir -p src/app",
+])
+def test_review_false_positives_are_gone(text):
+    assert Redactor(home="/nonexistent", hostname="zz").text(text) == text
+
+
+def test_identity_is_removed_in_every_form():
+    r = Redactor(home="/Users/alice", hostname="alices-MacBook-Pro.local")
+    out = r.text("/Users/alice/x -Users-alice-Documents-GitHub-app/m.md /users/alice/y "
+                 "alice@alices-MacBook-Pro ~ % ls -l\ndrwxr-xr-x  4 alice  staff  128 . on alices-MacBook-Pro")
+    assert "alice" not in out.lower()
+    assert r.text("/Users/alice2/x") == "/Users/alice2/x"  # another user's home is not ours
+
+
+def test_private_key_body_in_a_diff_is_removed(log, tmp_path):
+    key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo\n-----END RSA PRIVATE KEY-----"
+    log.edit("/work/app/config.py", "KEY = None", f'KEY = """{key}"""')
+    s = redact_session(ingest.load(log.write(tmp_path / "k.jsonl")), home="/x", hostname="zz")
+    assert "MIIEow" not in repr([h.lines for e in s.tools for h in e.hunks])
+
+
+def test_branch_and_model_are_redacted(log, tmp_path):
+    log.lines.append({"type": "user", "cwd": "/w", "gitBranch": "alice@acme.com/sk_live_51H8abcdefghijklmnop",
+                      "message": {"role": "user", "content": "hello there, please fix the build"}})
+    s = redact_session(ingest.load(log.write(tmp_path / "b.jsonl")), home="/x", hostname="zz")
+    assert "acme.com" not in s.branch and "51H8" not in s.branch
+
+
+def test_more_secret_files():
+    for f in ["/a/.git-credentials", "/a/.envrc", "/a/prod.tfvars", "/a/x.tfstate", "/a/c.p12",
+              "/a/k.pfx", "/k/sa-key.json", "/h/.kube/config", "/h/.docker/config.json", "/h/.aws/credentials"]:
+        assert is_secret_file(f), f

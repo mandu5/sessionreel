@@ -61,7 +61,7 @@ scene data supports), and renders. Or `npx skills add mandu5/sessionreel`.
 ## Use
 
 ```
-sessionreel                          # newest session for the current directory
+sessionreel                          # this session inside Claude Code; else the newest one for this directory
 sessionreel 5e55a0d0                 # a session id prefix, or a path to a .jsonl
 sessionreel list                     # recent sessions: id, time, prompts, tool calls, project
 sessionreel demo                     # a bundled sample session — no logs needed
@@ -71,6 +71,7 @@ sessionreel --lang ko                # Korean captions
 sessionreel --voice                  # narrate with the OS voice (say / espeak-ng), no cloud TTS
 sessionreel --gif                    # also write a GIF
 sessionreel --redact 'ACME-\d+'      # extra pattern to scrub (repeatable)
+sessionreel --project "client app"   # name shown on frames instead of the directory; --no-branch hides the branch
 ```
 
 Edit before rendering:
@@ -86,12 +87,22 @@ A 35-second 1080×1080 reel renders in about 30 seconds on an M1 Pro and is ~1 M
 ## Privacy
 
 Redaction runs on the parsed session **before** the storyboard exists, so no later stage ever
-sees the original strings. It removes provider keys (Anthropic, OpenAI, GitHub, AWS, Slack,
-Google, Hugging Face), JWTs, bearer tokens, private keys, `SECRET=value`-style assignments,
-credentials and tokens in URLs, e-mail addresses, and your home directory (shown as `~`).
-Contents of `.env*`, `*.pem`, `*.key`, `id_*` and similar files are never shown. `plan` and
-`make` print how many items were removed, by kind. The renderer refuses a storyboard that
-wasn't produced by the redacting planner.
+sees the original strings, and it runs **again at render time** over every string in the
+storyboard, so a caption edited by you or by an agent is checked too. It removes:
+
+- provider keys and tokens (Anthropic, OpenAI, Stripe, GitHub, GitLab, npm, PyPI, AWS, Slack,
+  SendGrid, Twilio, Google, Hugging Face), JWTs, bearer/basic auth, private-key blocks — also
+  when they span lines inside a diff — webhook URLs, credentials and tokens in URLs;
+- `SECRET=value`, `"api_key": "…"`, `--password …`, `mysql -p…`, `curl -u user:pass`;
+- long high-entropy strings that look like credentials;
+- your identity: home directory (→ `~`, including Claude Code's `-Users-you-…` form), username,
+  hostname, `user@host` prompts, e-mail addresses;
+- the contents of `.env*`, `*.pem`, `*.key`, `*.p12`, `*.tfvars`, `.git-credentials`,
+  kube/docker/AWS credential files — never shown at all.
+
+`plan` prints how many items were removed, by kind. `--project NAME` replaces the directory name
+shown on every frame and `--no-branch` hides the git branch. Captions whose numbers do not appear
+in the scene's data are flagged at render time.
 
 Redaction is pattern-based. **Watch the video before you post it.** Nothing is uploaded
 anywhere; sessionreel makes no network calls.
@@ -121,7 +132,7 @@ a time budget) → `render` (Pillow draws each frame; frames stream into ffmpeg 
 H.264). Design notes: [DESIGN.md](DESIGN.md).
 
 ```
-python -m pytest -q      # 75 tests: ingest, adversarial redaction, check parsing, arcs, rendering, CLI
+python -m pytest -q      # 140 tests: ingest, adversarial redaction, check parsing, arcs, storyboard safety, rendering, CLI
 ```
 
 ## License

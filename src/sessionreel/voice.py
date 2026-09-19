@@ -29,10 +29,12 @@ def _speakable(text: str) -> str:
 
 def _clip(text: str, out: Path, engine: str, voice: str | None) -> float:
     raw = out.with_suffix(".aiff" if engine == "say" else ".raw.wav")
+    script = out.with_suffix(".txt")
+    script.write_text(text, encoding="utf-8")  # a file, never argv: text starting with '-' is not an option
     if engine == "say":
-        cmd = ["say", "-o", str(raw)] + (["-v", voice] if voice else []) + [text]
+        cmd = ["say", "-o", str(raw), "-f", str(script)] + (["-v", voice] if voice else [])
     else:
-        cmd = [engine, "-w", str(raw)] + (["-v", voice] if voice else []) + [text]
+        cmd = [engine, "-w", str(raw), "-f", str(script)] + (["-v", voice] if voice else [])
     subprocess.run(cmd, check=True, capture_output=True)
     subprocess.run([ffmpeg_exe(), "-y", "-loglevel", "error", "-i", str(raw), "-ar", "44100", "-ac", "1", str(out)], check=True)
     with wave.open(str(out)) as w:
@@ -48,9 +50,9 @@ def narrate(board: dict, voice: str | None = None, pad: float = 0.5) -> tuple[di
     parts: list[Path] = []
     for i, sc in enumerate(board["scenes"]):
         text = sc.get("caption") or ""
-        if sc["kind"] == "title":
+        if sc.get("kind") == "title":
             text = ". ".join(x for x in (sc.get("project"), sc.get("title")) if x)
-        elif sc["kind"] == "say":
+        elif sc.get("kind") == "say":
             text = f"{text}: {sc.get('text', '')}"
         seg = tmp / f"s{i:02d}.wav"
         dur = float(sc.get("seconds", 3))

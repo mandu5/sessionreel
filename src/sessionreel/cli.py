@@ -28,23 +28,27 @@ def _progress(done: int, total: int) -> None:
 def _resolve(ref: str | None) -> Path:
     if ref:
         return ingest.find_session(ref)
-    files = ingest.session_files(cwd=os.getcwd())
-    if not files:
+    found = ingest.current_session()
+    if found is None:
         raise FileNotFoundError(
-            f"no Claude Code sessions for {os.getcwd()} under {ingest.projects_root()}\n"
+            f"no Claude Code sessions for {os.getcwd()} (or its parents) under {ingest.projects_root()}\n"
             "  run `sessionreel list` to see all sessions, or pass a session id / .jsonl path")
-    return files[0]
+    return found
 
 
 def _plan(args: argparse.Namespace) -> dict:
     path = _resolve(args.session)
     sess = ingest.load(path)
     redact.redact_session(sess, extra=args.redact or ())
-    board = story.build(sess, lang=args.lang, whole=args.whole)
+    board = story.build(sess, lang=args.lang, whole=args.whole,
+                        project_name=getattr(args, "project", None), show_branch=not getattr(args, "no_branch", False))
     n = sum(board["redactions"].values())
+    ask = next((s["text"] for s in board["scenes"] if s["kind"] == "prompt"), "")
     what = ", ".join(f"{v} {k}" for k, v in sorted(board["redactions"].items(), key=lambda kv: -kv[1]))
-    _eprint(f"  session  {path.stem[:8]}  ({len(sess.events)} events"
+    _eprint(f"  session  {path.stem}  ({len(sess.events)} events"
             + (f", {sess.skipped_lines} malformed lines skipped" if sess.skipped_lines else "") + ")")
+    if ask:
+        _eprint(f"  ask      {ask[:90]}{'…' if len(ask) > 90 else ''}")
     _eprint(f"  story    {' → '.join(s['kind'] for s in board['scenes'])}"
             + ("" if board["arc"] else "   (no red→green arc found; built from the largest edits)"))
     _eprint(f"  redacted {n} item{'s' if n != 1 else ''}" + (f" ({what})" if what else ""))
@@ -52,6 +56,13 @@ def _plan(args: argparse.Namespace) -> dict:
 
 
 def _render(board: dict, args: argparse.Namespace) -> Path:
+    from .board import caption_claims, reredact, validate
+    board = validate(board)
+    board, changed = reredact(board)
+    if changed:
+        _eprint(f"  redacted {sum(changed.values())} more item(s) found in the storyboard ({', '.join(changed)})")
+    for w in caption_claims(board):
+        _eprint(f"  warning  {w}")
     out = Path(args.output)
     audio = None
     if args.voice is not None:
@@ -126,6 +137,8 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--lang", choices=sorted(story.T), default="en", help="caption language")
         sp.add_argument("--whole", action="store_true", help="tell the whole session, not just the episode around the fix")
         sp.add_argument("--redact", action="append", metavar="REGEX", help="extra pattern to redact (repeatable)")
+        sp.add_argument("--project", metavar="NAME", help="name shown on every frame instead of the directory name")
+        sp.add_argument("--no-branch", action="store_true", help="do not show the git branch")
 
     def video_opts(sp: argparse.ArgumentParser, default_out: str = "reel.mp4") -> None:
         sp.add_argument("-o", "--output", default=default_out)
@@ -157,7 +170,7 @@ def build_parser() -> argparse.ArgumentParser:
     dm = sub.add_parser("demo", help="render the bundled sample session (no logs needed)")
     dm.add_argument("--lang", choices=sorted(story.T), default="en")
     video_opts(dm, "sessionreel-demo.mp4")
-    dm.set_defaults(fn=cmd_demo, whole=False, redact=None)
+    dm.set_defaults(fn=cmd_demo, whole=False, redact=None, project=None, no_branch=False)
     return p
 
 
@@ -169,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.fn(args)
-    except (FileNotFoundError, ValueError, RuntimeError) as e:
+    except (FileNotFoundError, ValueError, RuntimeError, OSError, json.JSONDecodeError) as e:
         _eprint(f"sessionreel: {e}")
         return 1
     except KeyboardInterrupt:

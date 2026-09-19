@@ -10,7 +10,7 @@ from sessionreel.redact import redact_session
     ("PYTHONPATH=src python3 -m pytest", "pytest"), (".venv/bin/pytest -x", "pytest"),
     ("npx vitest run", "jest"), ("pnpm test", "npm-test"), ("go test ./...", "go-test"),
     ("cargo test", "cargo-test"), ("npx tsc --noEmit", "tsc"), ("make typecheck", "make typecheck"),
-    ("make -s test", "make test"), ("ruff check .", "ruff"),
+    ("make -s test", "make test"), ("ruff check .", "ruff check"),
     ("echo pytest", None), ("cat > f <<'EOF'\nmake stuff\npytest\nEOF", None),
     ("git commit -m 'run pytest'", None), ("grep -r pytest .", None),
 ])
@@ -28,13 +28,13 @@ def test_check_family(cmd, family):
     ("ERROR collecting tests/test_x.py\n1 error in 0.1s", True, False, None, None),
 ])
 def test_parse_check(out, err, ok, passed, failed):
-    r = story.parse_check(Event("tool", tool="Bash", input={"command": "pytest"}, output=out, error=err), 0)
+    r = story.parse_check(Event("tool", tool="Bash", input={"command": "pytest"}, output=out, error=err, has_result=True), 0)
     assert (r.ok, r.passed, r.failed) == (ok, passed, failed)
 
 
 def test_tsc_errors_count():
     ev = Event("tool", tool="Bash", input={"command": "tsc --noEmit"},
-               output="a.ts(1,1): error TS2322: x\nb.ts(2,2): error TS2345: y", error=True)
+               output="a.ts(1,1): error TS2322: x\nb.ts(2,2): error TS2345: y", error=True, has_result=True)
     r = story.parse_check(ev, 0)
     assert not r.ok and r.errors == 2
 
@@ -112,3 +112,110 @@ def test_captions_in_korean(arc_session):
 def test_empty_session(log, tmp_path):
     b = _board(log.write(tmp_path / "empty.jsonl"))
     assert [s["kind"] for s in b["scenes"]] == ["title", "stats", "end"]
+
+
+# ---- regressions from the pre-release review ------------------------------------------------
+
+def _ev(cmd, out, err=False, has_result=True):
+    return Event("tool", tool="Bash", input={"command": cmd}, output=out, error=err, has_result=has_result)
+
+
+@pytest.mark.parametrize("out,err,has", [
+    ("Command running in background with ID: bash_1", False, True),
+    ("The user doesn't want to proceed with this tool use. The tool use was rejected", True, True),
+    ("", False, False),                  # pending / truncated log: no result
+    ("collected 0 items", False, True),  # ran, but no pass signal
+])
+def test_no_verdict_is_not_a_pass_or_a_fail(out, err, has):
+    assert story.parse_check(_ev("pytest -q", out, err, has), 0) is None
+
+
+def test_ruff_fix_with_nothing_remaining_is_green():
+    r = story.parse_check(_ev("ruff check --fix .", "Found 3 errors (3 fixed, 0 remaining)."), 0)
+    assert r.ok and r.errors == 0
+
+
+def test_ruff_subcommands_are_different_checks():
+    assert story.check_family("ruff check a.py") == "ruff check"
+    assert story.check_family("ruff format b.py") == "ruff format"
+
+
+def test_green_must_not_be_narrower_than_red(log, tmp_path):
+    log.prompt("Fix the parser failures in the test suite please")
+    log.bash("pytest -q", "5 failed, 20 passed", error=True)
+    log.edit("/work/app/parser.py", "a", "b")
+    log.bash("pytest -q tests/test_parser.py -k empty", "1 passed, 24 deselected")
+    b = _board(log.write(tmp_path / "narrow.jsonl"))
+    assert not b["arc"] and "5 failed → 1 passed" not in b["scenes"][0]["title"]
+
+
+def test_green_with_same_selectors_pairs(log, tmp_path):
+    log.prompt("Fix the parser failures in the test suite please")
+    log.bash("pytest -q tests/test_parser.py", "2 failed, 3 passed", error=True)
+    log.edit("/work/app/parser.py", "a", "b")
+    log.bash("pytest -q tests/test_parser.py", "5 passed")
+    assert _board(log.write(tmp_path / "same.jsonl"))["scenes"][0]["title"] == "2 failed → 5 passed"
+
+
+def test_background_green_is_not_an_arc(log, tmp_path):
+    log.prompt("Fix the parser failures in the test suite please")
+    log.bash("pytest -q", "5 failed", error=True).edit("/work/app/p.py", "a", "b")
+    log.bash("pytest -q", "Command running in background with ID: bash_1")
+    assert not _board(log.write(tmp_path / "bg.jsonl"))["arc"]
+
+
+@pytest.mark.parametrize("cmd,actions", [
+    ("git add -A && git commit -m 'x' && git push", ["commit", "push"]),
+    ("git -C repo push origin main", ["push"]),
+    ("git push --dry-run origin main", []),
+    ("grep -rn \"git push\" docs/", []),
+    ("python3 - <<'EOF'\nimport os\nos.system('git commit -m x')\nEOF", []),
+    ("gh pr create --fill", ["pr"]),
+])
+def test_ship_actions(cmd, actions):
+    assert [a for a, _ in story.ship_actions(cmd)] == actions
+
+
+def test_commit_only_is_not_called_shipped(arc_session):
+    b = _board(arc_session)
+    ship = next(s for s in b["scenes"] if s["kind"] == "ship")
+    assert ship["caption"] == "Committed" and ship["message"] == "parser: skip empty lines"
+
+
+def test_commit_message_is_subject_line_only():
+    assert story._commit_message('git commit -m "Subject line\n\nBody text\nCo-Authored-By: X"') == "Subject line"
+
+
+def test_teammate_messages_are_not_the_ask(log, tmp_path):
+    log.prompt("Another Claude session sent a message: <teammate-message>do x</teammate-message>")
+    log.prompt("Please fix the login redirect loop on the settings page")
+    log.edit("/work/app/auth.py", "a", "b")
+    b = _board(log.write(tmp_path / "tm.jsonl"))
+    assert "login redirect" in next(s for s in b["scenes"] if s["kind"] == "prompt")["text"]
+
+
+def test_write_line_counts_are_not_capped(log, tmp_path):
+    body = "\n".join(f"x{i} = {i}" for i in range(1000))
+    log.prompt("Generate the lookup table module from the spec")
+    log.tool("Write", {"file_path": "/work/app/table.py", "content": body}, "ok")
+    b = _board(log.write(tmp_path / "big.jsonl"))
+    stats = dict(next(s for s in b["scenes"] if s["kind"] == "stats")["items"])
+    assert stats["lines"] == "+1000 −0"
+    assert next(s for s in b["scenes"] if s["kind"] == "diff")["added"] == 1000
+
+
+def test_project_and_branch_overrides(arc_session):
+    b = _board(arc_session, project_name="client-app", show_branch=False)
+    assert b["scenes"][0]["project"] == "client-app" and b["scenes"][0]["branch"] == ""
+
+
+def test_commands_after_a_heredoc_still_count():
+    cmd = "cd repo && python3 - <<'PYEOF'\nprint('pytest inside is data')\nPYEOF\n.venv/bin/python -m pytest -q 2>&1 | tail -3"
+    assert story.check_family(cmd) == "pytest"
+    assert story.ship_actions("cat > f <<EOF\ngit push\nEOF\ngit push origin main")[0][0] == "push"
+
+
+def test_python_dash_m_is_not_a_selector():
+    r = story.parse_check(Event("tool", tool="Bash", input={"command": ".venv/bin/python -m pytest -q"},
+                                output="95 passed", has_result=True), 0)
+    assert r.selectors == ()

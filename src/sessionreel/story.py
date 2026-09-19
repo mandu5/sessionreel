@@ -27,7 +27,7 @@ _CHECKS: list[tuple[str, re.Pattern[str]]] = [
     ("mypy", re.compile(r"\bmypy\b|\bpyright\b")),
     ("unittest", re.compile(r"\bpython[0-9.]* -m unittest\b")),
 ]
-_SHIP = re.compile(r"\bgit (?:commit|push)\b|\bgh (?:pr create|release create)\b|\b(?:npm|pnpm) publish\b|\btwine upload\b|\buv publish\b")
+_SHIP = re.compile(r"^(?:git (?:commit|push)|gh (?:pr create|release create)|(?:npm|pnpm|yarn) publish|twine upload|uv publish)\b")
 _COMMIT_MSG = re.compile(r"""git commit[^\n]*?-m\s+(?:"([^"]+)"|'([^']+)'|\$\(cat <<'?EOF'?\n([^\n]+))""")
 _EXPLORE = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch"}
 _EDITS = {"Edit", "MultiEdit", "Write", "NotebookEdit"}
@@ -48,31 +48,85 @@ class CheckRun:
     passed: int | None
     failed: int | None
     errors: int | None
+    selectors: tuple[str, ...] = ()  # paths / -k / -m / node ids that narrow what ran
 
 
-_PREFIX = re.compile(r"^(?:[A-Z_][A-Z0-9_]*=\S*\s+)*(?:(?:uv|poetry|pdm|hatch)\s+run\s+|npx\s+|bunx\s+|\S*/(?=\S*(?:pytest|python|jest|vitest|tsc|ruff|mypy)\b))?")
+_PREFIX = re.compile(r"^(?:[A-Z_][A-Z0-9_]*=\S*\s+)*(?:(?:uv|poetry|pdm|hatch)\s+run\s+(?:--\S+\s+)*|npx\s+|bunx\s+|\S*/(?=\S*(?:pytest|python|jest|vitest|tsc|ruff|mypy)\b))?")
+# checks whose success is legitimately silent (no "N passed" line)
+_SILENT_OK = ("tsc", "build", "make", "mypy", "ruff", "go-test", "cargo-test")
+# tool results that carry no verdict at all
+_NO_VERDICT = re.compile(r"running in background|Command running in background|doesn't want to proceed|"
+                         r"tool use was rejected|was rejected by the user|\[Request interrupted|Interrupted by user", re.I)
+
+
+_HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1")
+
+
+def _strip_heredocs(command: str) -> str:
+    """Remove heredoc bodies (they are data, not commands) but keep what runs after them."""
+    out: list[str] = []
+    lines = command.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(_HEREDOC.sub("", line))
+        delims = [m.group(2) for m in _HEREDOC.finditer(line)]
+        i += 1
+        for d in delims:
+            while i < len(lines) and lines[i].strip() != d:
+                i += 1
+            i += 1  # skip the terminator line
+    return "\n".join(out)
 
 
 def _segments(command: str) -> list[str]:
     """Split a shell line into the commands it runs; heredoc bodies are not commands."""
-    body = re.split(r"<<-?\s*'?\"?(\w+)", command, maxsplit=1)[0]
+    body = _strip_heredocs(command)
     return [seg.strip() for seg in re.split(r"&&|\|\||;|\||\n", body) if seg.strip()]
 
 
-def check_family(command: str) -> str | None:
-    """The check a command runs, judged only from the start of each shell segment."""
+def _check_segment(command: str) -> tuple[str, str] | None:
+    """(family, the segment with prefixes stripped) for the first segment that runs a check."""
     for seg in _segments(command):
-        if seg.startswith(("cd ", "echo ", "export ", "source ", ". ")):
+        if seg.startswith(("cd ", "echo ", "export ", "source ", ". ", "printf ")):
             continue
         head = _PREFIX.sub("", seg)
         for family, rx in _CHECKS:
             m = rx.search(head)
             if m and m.start() == 0:
-                if family == "build" and head.startswith("make"):
-                    target = next((w for w in head.split()[1:] if not w.startswith("-")), "")
-                    return f"make {target}".strip()
-                return family
+                words = head.split()
+                if family == "build" and words[0] == "make":
+                    target = next((w for w in words[1:] if not w.startswith("-")), "")
+                    return f"make {target}".strip(), head
+                if family == "ruff":
+                    sub = next((w for w in words[1:] if not w.startswith("-")), "check")
+                    return f"ruff {sub}", head
+                if family == "pytest":
+                    head = re.sub(r"^python[0-9.]*\s+-m\s+", "", head)
+                return family, head
     return None
+
+
+def check_family(command: str) -> str | None:
+    """The check a command runs, judged only from the start of each shell segment."""
+    found = _check_segment(command)
+    return found[0] if found else None
+
+
+def _selectors(head: str) -> tuple[str, ...]:
+    """What narrows a run: path/node arguments and -k/-m/--grep/-t/--testNamePattern values."""
+    words = head.split()
+    out: list[str] = []
+    take = False
+    for w in words[1:]:
+        if take:
+            out.append(w)
+            take = False
+        elif w in ("-k", "-m", "--grep", "-t", "--testNamePattern", "-run", "--run", "-p"):
+            take = True
+        elif not w.startswith("-") and ("/" in w or "." in w or "::" in w) and w not in (".", "./..."):
+            out.append(w)
+    return tuple(sorted(set(out)))
 
 
 def _num(rx: str, text: str) -> int | None:
@@ -81,10 +135,14 @@ def _num(rx: str, text: str) -> int | None:
 
 
 def parse_check(ev: Event, index: int) -> CheckRun | None:
-    family = check_family(ev.command)
-    if family is None:
+    """The verdict of a check run, or None when the log does not contain one."""
+    found = _check_segment(ev.command)
+    if found is None:
         return None
+    family, head = found
     out = ev.output
+    if not ev.has_result or _NO_VERDICT.search(out[:400]):
+        return None  # pending, backgrounded, rejected or interrupted: no verdict to show
     passed = _num(r"(\d+) passed", out)
     failed = _num(r"(\d+) failed", out)
     errors = _num(r"(\d+) errors?\b", out)
@@ -95,14 +153,26 @@ def parse_check(ev: Event, index: int) -> CheckRun | None:
     m = re.search(r"test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed", out)  # cargo
     if m:
         passed, failed = int(m.group(1)), int(m.group(2))
-    bad = ev.error or bool(failed) or bool(errors) or bool(re.search(r"^(?:FAIL|FAILED)\b|Exit code [1-9]", out, re.M))
-    if family == "tsc" and re.search(r"error TS\d+", out):
-        bad = True
-        errors = errors or len(re.findall(r"error TS\d+", out))
-    return CheckRun(index, family, not bad, passed, failed, errors)
+    m = re.search(r"\((\d+) fixed, (\d+) remaining\)", out)  # ruff --fix
+    if m:
+        errors = int(m.group(2))
+    if family == "tsc":
+        n = len(re.findall(r"error TS\d+", out))
+        errors = n or errors
+    if family.startswith(("ruff", "tsc", "mypy", "make", "build")):
+        bad = ev.error or bool(errors)
+    else:
+        bad = ev.error or bool(failed) or bool(errors) or bool(re.search(r"^(?:FAIL|FAILED)\b|Exit code [1-9]", out, re.M))
+    if not bad:
+        positive = (passed or 0) > 0 or bool(re.search(r"All checks passed|Success: no issues|\bok\b|^PASS\b", out, re.M))
+        if not positive and not family.startswith(_SILENT_OK):
+            return None  # "not failed" is not the same as "passed"
+    return CheckRun(index, family, not bad, passed, failed, errors, _selectors(head))
 
 
 def _changed(ev: Event) -> tuple[int, int]:
+    if ev.added or ev.removed:
+        return ev.added, ev.removed
     add = sum(1 for h in ev.hunks for ln in h.lines if ln.startswith("+"))
     rem = sum(1 for h in ev.hunks for ln in h.lines if ln.startswith("-"))
     return add, rem
@@ -188,7 +258,9 @@ def active_seconds(events: list[Event]) -> float:
 
 
 def _fmt_duration(seconds: float) -> str:
-    mins = max(1, int(seconds // 60))
+    if seconds < 60:
+        return "<1 min"
+    mins = int(seconds // 60)
     return f"{mins // 60}h {mins % 60:02d}m" if mins >= 60 else f"{mins} min"
 
 
@@ -201,18 +273,20 @@ T = {
         "goal": "The ask", "explore": "Read {files} file{fs}, ran {searches} search{ss}",
         "red": "{badge} — `{family}` goes red", "fix": "Fix in {file} (+{add} −{rem})",
         "green": "Green: {badge}", "edit": "Changed {file} (+{add} −{rem})",
-        "ship": "Shipped", "check": "Ran `{family}`: {badge}", "say": "What the agent reported",
-        "stats": "The session in numbers", "end": "Recapped from the session log with sessionreel",
-        "labels": {"active time": "active time", "tool calls": "tool calls", "files changed": "files changed",
+        "ship": {"commit": "Committed", "push": "Pushed", "commit+push": "Committed and pushed",
+                 "pr": "Pull request opened", "publish": "Published"}, "check": "Ran `{family}`: {badge}", "say": "What the agent reported",
+        "stats": "This task in numbers", "end": "Recapped from the session log with sessionreel",
+        "labels": {"active time": "active time", "tool calls": "tool calls", "files edited": "files edited",
                    "lines": "lines", "tests": "tests", "prompts": "prompts", "passing": "passing"},
     },
     "ko": {
         "goal": "요청", "explore": "파일 {files}개 읽고 {searches}번 검색",
         "red": "{badge} — `{family}` 실패", "fix": "{file} 수정 (+{add} −{rem})",
         "green": "통과: {badge}", "edit": "{file} 변경 (+{add} −{rem})",
-        "ship": "배포", "check": "`{family}` 실행: {badge}", "say": "에이전트의 보고",
-        "stats": "숫자로 본 세션", "end": "세션 로그로 만든 리캡 · sessionreel",
-        "labels": {"active time": "작업 시간", "tool calls": "도구 호출", "files changed": "바뀐 파일",
+        "ship": {"commit": "커밋", "push": "푸시", "commit+push": "커밋하고 푸시",
+                 "pr": "PR 생성", "publish": "배포"}, "check": "`{family}` 실행: {badge}", "say": "에이전트의 보고",
+        "stats": "숫자로 본 이 작업", "end": "세션 로그로 만든 리캡 · sessionreel",
+        "labels": {"active time": "작업 시간", "tool calls": "도구 호출", "files edited": "수정한 파일",
                    "lines": "줄", "tests": "테스트", "prompts": "프롬프트", "passing": "통과"},
     },
 }
@@ -223,7 +297,11 @@ def _find_arc(ev: list[Event], runs: list[CheckRun]) -> tuple[CheckRun, CheckRun
     for j in range(len(runs) - 1, -1, -1):
         if not runs[j].ok:
             continue
-        for red in reversed([r for r in runs[:j] if r.family == runs[j].family and not r.ok]):
+        green = runs[j]
+        # same check, and the green run covers at least what the red one ran (no narrowing)
+        same = [r for r in runs[:j] if r.family == green.family and not r.ok
+                and (green.selectors == r.selectors or not green.selectors)]
+        for red in reversed(same):
             if runs[j].index - red.index > MAX_ARC_EVENTS:
                 break
             if any(e.kind == "tool" and e.tool in _EDITS and e.hunks for e in ev[red.index:runs[j].index]):
@@ -273,19 +351,34 @@ _NOISE = re.compile(r"^(?:Shell cwd was reset to .*|.*<persisted-output>.*|\(eva
 
 
 def _commit_message(command: str) -> str:
+    """Subject line of the commit message, from -m "..." or a -F - heredoc."""
     m = _COMMIT_MSG.search(command)
-    if m:
-        return next((g for g in m.groups() if g), "")
-    m = re.search(r"git commit[^\n]*?-F\s*-\s*<<-?\s*['\"]?(\w+)['\"]?[^\n]*\n\s*(\S[^\n]*)", command)
-    return m.group(2).strip() if m else ""
+    msg = next((g for g in m.groups() if g), "") if m else ""
+    if not msg:
+        m = re.search(r"git commit[^\n]*?-F\s*-\s*<<-?\s*['\"]?(\w+)['\"]?[^\n]*\n\s*(\S[^\n]*)", command)
+        msg = m.group(2) if m else ""
+    return msg.strip().split("\n")[0].strip()
 
 
-def _ship_command(command: str) -> str:
-    seg = next((x for x in _segments(command) if _SHIP.search(x)), command)
-    return seg.split("\n")[0]
+def ship_actions(command: str) -> list[tuple[str, str]]:
+    """(action, segment) for each shell segment that commits, pushes, opens a PR or publishes.
+
+    Matched only at the start of a segment (after `git -C dir`), so heredoc bodies, quoted
+    arguments and `grep "git push"` do not count; dry runs do not count either.
+    """
+    out: list[tuple[str, str]] = []
+    for seg in _segments(command):
+        head = re.sub(r"^git\s+(?:-C\s+\S+\s+|-c\s+\S+\s+)+", "git ", _PREFIX.sub("", seg))
+        if not _SHIP.search(head) or re.search(r"\s(?:--dry-run|-n)\b", head):
+            continue
+        action = ("commit" if head.startswith("git commit") else "push" if head.startswith("git push")
+                  else "pr" if head.startswith("gh pr") else "publish")
+        out.append((action, head))
+    return out
 
 
-def build(sess: Session, lang: str = "en", max_scenes: int = 9, whole: bool = False) -> dict:
+def build(sess: Session, lang: str = "en", max_scenes: int = 9, whole: bool = False,
+          project_name: str | None = None, show_branch: bool = True) -> dict:
     t = T.get(lang, T["en"])
     _CWD[0] = sess.cwd
     start, end, arc = episode(sess, whole)
@@ -305,16 +398,17 @@ def build(sess: Session, lang: str = "en", max_scenes: int = 9, whole: bool = Fa
 
     scenes: list[dict] = []
     started = next((e.ts for e in ev if e.ts), None)
-    project = os.path.basename(sess.cwd.rstrip("/")) or "session"
+    project = project_name or os.path.basename(sess.cwd.rstrip("/")) or "session"
     if arc:
         hook = f"{_badge(arc[0])} → {_badge(arc[1])}"
     elif edits:
-        hook = f"{len({e.file for _, e in edits})} files changed"
+        n = len({e.file for _, e in edits})
+        hook = f"{n} file{'' if n == 1 else 's'} changed"
     else:
         hook = _clip(sess.title, 60)
     scenes.append({"kind": "title", "project": project, "title": hook,
                    "date": started.strftime("%Y-%m-%d") if started else "", "model": sess.model,
-                   "branch": "" if sess.branch in ("HEAD", "") else sess.branch,
+                   "branch": "" if (sess.branch in ("HEAD", "") or not show_branch) else sess.branch,
                    "duration": _fmt_duration(active_seconds(ev))})
     if goal:
         scenes.append({"kind": "prompt", "text": _clip(goal.text, 280), "caption": t["goal"], "fact": t["goal"]})
@@ -352,11 +446,18 @@ def build(sess: Session, lang: str = "en", max_scenes: int = 9, whole: bool = Fa
             scenes.append(term(ev[last.index], last, t["check"].format(family=last.family, badge=_badge(last))))
 
     after = arc[1].index if arc else 0
-    ship = next((e for e in ev[after:] if e.kind == "tool" and e.tool == "Bash" and not e.error
-                 and _SHIP.search(e.command)), None)
-    if ship:
-        scenes.append({"kind": "ship", "command": _clip(_ship_command(ship.command), 120),
-                       "message": _clip(_commit_message(ship.command), 90), "caption": t["ship"], "fact": t["ship"]})
+    shipped = [(e, ship_actions(e.command)) for e in ev[after:]
+               if e.kind == "tool" and e.tool == "Bash" and e.has_result and not e.error]
+    shipped = [(e, acts) for e, acts in shipped if acts]
+    if shipped:
+        actions = {a for _, acts in shipped for a, _ in acts}
+        first = next(((e, seg) for e, acts in shipped for a, seg in acts if a == "commit"),
+                     (shipped[0][0], shipped[0][1][0][1]))
+        key = ("commit+push" if {"commit", "push"} <= actions else "pr" if "pr" in actions
+               else "publish" if "publish" in actions else "push" if "push" in actions else "commit")
+        cap = t["ship"][key]
+        scenes.append({"kind": "ship", "command": _clip(first[1].split("\n")[0], 120),
+                       "message": _clip(_commit_message(first[0].command), 90), "caption": cap, "fact": cap})
 
     final = next((e for e in reversed(ev) if e.kind == "say" and len(e.text) > 20), None)
     if final:
@@ -366,8 +467,13 @@ def build(sess: Session, lang: str = "en", max_scenes: int = 9, whole: bool = Fa
     add = sum(_changed(e)[0] for _, e in edits)
     rem = sum(_changed(e)[1] for _, e in edits)
     tools = [e for e in ev if e.kind == "tool"]
-    items = [["active time", _fmt_duration(active_seconds(ev))], ["tool calls", str(len(tools))],
-             ["files changed", str(len(touched))], ["lines", f"+{add} −{rem}"]]
+    items = []
+    secs = active_seconds(ev)
+    if secs > 0:
+        items.append(["active time", _fmt_duration(secs)])
+    items.append(["tool calls", str(len(tools))])
+    if touched:
+        items += [["files edited", str(len(touched))], ["lines", f"+{add} −{rem}"]]
     final_run = runs[-1] if runs else None
     if final_run and final_run.passed is not None:
         items.append(["tests", f"{final_run.passed} passing" if final_run.ok else _badge(final_run)])

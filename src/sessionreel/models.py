@@ -26,6 +26,9 @@ class Event:
     error: bool = False
     hunks: list[Hunk] = field(default_factory=list)
     file: str = ""  # file path for Read/Edit/Write, already redacted
+    has_result: bool = False  # a tool_result was found for this call
+    added: int = 0  # lines added/removed, counted before any display cap
+    removed: int = 0
 
     @property
     def command(self) -> str:

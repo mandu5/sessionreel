@@ -21,7 +21,10 @@ _WRAPPERS = (
     "<command-name>", "<command-message>", "<local-command", "<system-reminder>",
     "<task-notification>", "<bash-input>", "<bash-stdout>", "<user-prompt-submit-hook>",
     "Caveat:", "[Request interrupted", "This session is being continued",
+    "Another Claude session sent a message", "<teammate-message", "<local-command-caveat>",
 )
+_INJECTED = re.compile(r"<(system-reminder|local-command-caveat|command-name|command-message|command-args|local-command-stdout)>"
+                       r"[\s\S]*?</\1>")
 FILE_TOOLS = {"Read", "Edit", "MultiEdit", "Write", "NotebookEdit"}
 MAX_WRITE_LINES = 400
 
@@ -54,16 +57,45 @@ def session_files(root: Path | None = None, cwd: str | None = None) -> list[Path
 
 
 def find_session(ref: str, root: Path | None = None) -> Path:
-    """Accept a path, a full session id, or a unique id prefix."""
+    """Accept a path, a full session id, or a unique id prefix.
+
+    The same session id can exist under two project directories (a session that changed
+    directory); an exact id match picks the most recently written copy.
+    """
     p = Path(ref).expanduser()
     if p.is_file():
         return p
-    hits = [f for f in session_files(root) if f.stem.startswith(ref)]
-    if len(hits) == 1:
+    files = session_files(root)
+    exact = [f for f in files if f.stem == ref]
+    if exact:
+        return exact[0]  # session_files is newest first
+    hits = [f for f in files if f.stem.startswith(ref)]
+    if len({f.stem for f in hits}) == 1:
         return hits[0]
     if not hits:
         raise FileNotFoundError(f"no session matches {ref!r}")
-    raise FileNotFoundError(f"{ref!r} is ambiguous ({len(hits)} sessions); use more characters")
+    raise FileNotFoundError(f"{ref!r} is ambiguous ({len({f.stem for f in hits})} sessions); use more characters")
+
+
+def current_session(cwd: str | None = None, root: Path | None = None) -> Path | None:
+    """The session the user most likely means when they name none.
+
+    1. Inside Claude Code, CLAUDE_CODE_SESSION_ID names the running session exactly.
+    2. Otherwise the newest session recorded for this directory or its nearest parent that has
+       any (a command run from a subdirectory still finds the project's sessions).
+    """
+    sid = os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("CLAUDE_SESSION_ID")
+    if sid:
+        try:
+            return find_session(sid, root)
+        except FileNotFoundError:
+            pass
+    d = Path(os.path.abspath(cwd or os.getcwd()))
+    for candidate in (d, *d.parents):
+        files = session_files(root, str(candidate))
+        if files:
+            return files[0]
+    return None
 
 
 def _ts(entry: dict[str, Any]) -> datetime | None:
@@ -89,7 +121,8 @@ def _prompt_text(entry: dict[str, Any]) -> str | None:
                          if isinstance(b, dict) and b.get("type") == "text")
     else:
         return None
-    text = text.strip()
+    # Harness blocks ride along with a real prompt in the same message; drop them, keep the ask.
+    text = _INJECTED.sub("", text).strip()
     if not text or text.startswith(_WRAPPERS):
         return None
     return text
@@ -105,21 +138,31 @@ def _result_text(block: dict[str, Any]) -> str:
     return ""
 
 
-def _hunks(tool: str, tool_input: dict[str, Any], result: Any) -> list[Hunk]:
+def _count(hunks: list[Hunk]) -> tuple[int, int]:
+    return (sum(1 for h in hunks for ln in h.lines if ln.startswith("+")),
+            sum(1 for h in hunks for ln in h.lines if ln.startswith("-")))
+
+
+def _hunks(tool: str, tool_input: dict[str, Any], result: Any) -> tuple[list[Hunk], int, int]:
+    """Diff hunks for an edit plus the true +/- line counts (counted before the display cap)."""
     if isinstance(result, dict):
         patch = result.get("structuredPatch")
         if isinstance(patch, list) and patch:
-            return [Hunk(int(h.get("oldStart", 0)), int(h.get("newStart", 0)),
-                         [str(x) for x in h.get("lines", [])]) for h in patch if isinstance(h, dict)]
+            hunks = [Hunk(int(h.get("oldStart", 0)), int(h.get("newStart", 0)),
+                          [str(x) for x in h.get("lines", [])]) for h in patch if isinstance(h, dict)]
+            return (hunks, *_count(hunks))
     if tool == "Write":
         body = str(tool_input.get("content", ""))
-        lines = body.split("\n")[:MAX_WRITE_LINES]
-        return [Hunk(0, 1, ["+" + ln for ln in lines])] if body else []
+        if not body:
+            return [], 0, 0
+        lines = body.split("\n")
+        return [Hunk(0, 1, ["+" + ln for ln in lines[:MAX_WRITE_LINES]])], len(lines), 0
     if tool == "Edit" and "old_string" in tool_input:
         old = str(tool_input.get("old_string", "")).split("\n")
         new = str(tool_input.get("new_string", "")).split("\n")
-        return [Hunk(0, 0, ["-" + ln for ln in old] + ["+" + ln for ln in new])]
-    return []
+        hunks = [Hunk(0, 0, ["-" + ln for ln in old] + ["+" + ln for ln in new])]
+        return (hunks, *_count(hunks))
+    return [], 0, 0
 
 
 def load(path: str | Path) -> Session:
@@ -188,6 +231,7 @@ def load(path: str | Path) -> Session:
                     continue
                 ev.output = _result_text(block)
                 ev.error = bool(block.get("is_error"))
+                ev.has_result = True
                 if ev.tool in ("Edit", "MultiEdit", "Write", "NotebookEdit") and not ev.error:
-                    ev.hunks = _hunks(ev.tool, ev.input, entry.get("toolUseResult"))
+                    ev.hunks, ev.added, ev.removed = _hunks(ev.tool, ev.input, entry.get("toolUseResult"))
     return sess

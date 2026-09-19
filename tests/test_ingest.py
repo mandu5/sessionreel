@@ -50,3 +50,12 @@ def test_find_session_by_prefix(tmp_path, arc_session):
     target = root / "-work-app" / "abcd1234-0000.jsonl"
     target.write_text(arc_session.read_text())
     assert ingest.find_session("abcd", root=root) == target
+
+
+def test_injected_reminders_do_not_hide_the_real_prompt(log, tmp_path):
+    log.lines.append({"type": "user", "cwd": "/w", "message": {"role": "user", "content": [
+        {"type": "text", "text": "<system-reminder>\nfiles changed\n</system-reminder>"},
+        {"type": "text", "text": "Make the export button download a CSV"}]}})
+    log.prompt("<system-reminder>only a reminder</system-reminder>")
+    s = ingest.load(log.write(tmp_path / "inj.jsonl"))
+    assert [e.text for e in s.prompts] == ["Make the export button download a CSV"]

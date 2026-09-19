@@ -6,9 +6,11 @@ they do not dance. Everything is drawn with Pillow; there is no browser and no N
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from functools import lru_cache
@@ -659,10 +661,21 @@ def ffmpeg_exe() -> str:
 
 def render(board: dict, out: str | Path, fmt: str = "square", fps: int = FPS, audio: str | Path | None = None,
            progress: Callable[[int, int], None] | None = None) -> Path:
+    """Validate, re-redact and draw `board` into an mp4 at `out`.
+
+    The file appears at `out` only when encoding succeeded: frames go to a temporary file in
+    the same directory, which replaces `out` at the end, so a failure never destroys a good reel.
+    """
+    from .board import reredact, validate
+
     if not board.get("redacted"):
-        raise ValueError("refusing to render a storyboard that was not redacted")
+        raise ValueError("refusing to render a storyboard that was not produced by `sessionreel plan`")
+    if fmt not in FORMATS:
+        raise ValueError(f"unknown format {fmt!r}; choose from {', '.join(FORMATS)}")
+    board, _ = reredact(validate(board))
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    part = out.with_name(f".{out.stem}.part{out.suffix or '.mp4'}")
     w, h = FORMATS[fmt]
     total = sum(max(1, round(float(s.get("seconds", 3)) * fps)) for s in board["scenes"] if s.get("kind") in SCENES)
     cmd = [ffmpeg_exe(), "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
@@ -670,20 +683,34 @@ def render(board: dict, out: str | Path, fmt: str = "square", fps: int = FPS, au
     if audio:
         cmd += ["-i", str(audio), "-c:a", "aac", "-b:a", "160k", "-shortest"]
     cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "20",
-            "-movflags", "+faststart", str(out)]
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-    assert proc.stdin is not None
-    try:
-        for i, frame in enumerate(frames(board, fmt, fps)):
-            proc.stdin.write(frame.tobytes())
-            if progress:
-                progress(i + 1, total)
-        proc.stdin.close()
-    except BrokenPipeError:
-        pass
-    err = proc.stderr.read().decode("utf-8", "replace") if proc.stderr else ""
-    if proc.wait() != 0:
-        raise RuntimeError(f"ffmpeg failed: {err.strip()[:500]}")
+            "-movflags", "+faststart", "-f", "mp4", str(part)]
+    with tempfile.TemporaryFile() as errlog:  # a file, not a pipe: ffmpeg can never block on stderr
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=errlog)
+        assert proc.stdin is not None
+        ok = False
+        try:
+            for i, frame in enumerate(frames(board, fmt, fps)):
+                proc.stdin.write(frame.tobytes())
+                if progress:
+                    progress(i + 1, total)
+            proc.stdin.close()
+            code = proc.wait()
+            errlog.seek(0)
+            err = errlog.read().decode("utf-8", "replace").strip()
+            if code != 0:
+                raise RuntimeError(f"ffmpeg failed: {err[:500] or f'exit {code}'}")
+            ok = True
+        except BrokenPipeError:
+            proc.wait()
+            errlog.seek(0)
+            raise RuntimeError(f"ffmpeg stopped early: {errlog.read().decode('utf-8', 'replace').strip()[:500]}") from None
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+            if not ok:
+                part.unlink(missing_ok=True)
+    os.replace(part, out)
     return out
 
 
