@@ -1,0 +1,12 @@
+{
+  "name": "sessionreel",
+  "owner": { "name": "Youngmin Ko", "url": "https://github.com/mandu5" },
+  "plugins": [
+    {
+      "name": "sessionreel",
+      "source": "./",
+      "description": "Turn a Claude Code session into a short recap video. Local, redacted, no API key.",
+      "version": "0.1.0"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "sessionreel",
+  "description": "Turn this Claude Code session into a 30-60 second recap video: the ask, the failing test, the fix, green, shipped. Rendered locally, secrets redacted, no API key. /reel writes the storyboard, rewrites the captions from what actually happened, and renders an mp4.",
+  "version": "0.1.0",
+  "author": { "name": "Youngmin Ko", "url": "https://github.com/mandu5" },
+  "homepage": "https://github.com/mandu5/sessionreel",
+  "repository": "https://github.com/mandu5/sessionreel",
+  "license": "MIT",
+  "keywords": ["video", "recap", "session", "demo", "share", "changelog", "ffmpeg"]
+}

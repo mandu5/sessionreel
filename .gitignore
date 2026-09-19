@@ -1,0 +1,16 @@
+.omc/
+.claude/
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+out/
+*.mp4
+!docs/*.mp4
+*.gif
+!docs/*.gif
+.DS_Store
