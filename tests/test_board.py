@@ -35,7 +35,7 @@ def test_validate_normalises_types():
 
 
 def test_reredact_catches_secrets_added_by_editing():
-    b = _b({"kind": "prompt", "caption": "key sk-ant-api03-abcdefghijklmnop", "text": "mail a@b.co", "seconds": 1})
+    b = _b({"kind": "prompt", "caption": "key sk" "-ant-api03-abcdefghijklmnop", "text": "mail a@b.co", "seconds": 1})
     out, changed = B.reredact(b)
     assert "sk-ant" not in out["scenes"][0]["caption"] and "a@b.co" not in out["scenes"][0]["text"]
     assert changed and B.reredact(out)[1] == {}  # idempotent

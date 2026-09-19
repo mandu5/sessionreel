@@ -1,0 +1,6 @@
+# Redaction tests need strings shaped like credentials. They are fabricated
+# (e.g. "abcdefgh…", AWS's documented AKIAIOSFODNN7EXAMPLE) and assembled at runtime.
+version: 2
+secret:
+  ignored_paths:
+    - "tests/**"

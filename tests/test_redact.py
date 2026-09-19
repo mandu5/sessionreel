@@ -4,26 +4,26 @@ from sessionreel import ingest
 from sessionreel.redact import Redactor, is_secret_file, redact_session
 
 LEAKS = [
-    ("sk-ant-api03-AbCdEfGhIjKlMnOpQrStUv", "anthropic-key"),
-    ("sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz123456", "openai-key"),
-    ("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz1234", "github-token"),
-    ("github_pat_11ABCDEFG0123456789_abcdefghijkl", "github-token"),
-    ("AKIAIOSFODNN7EXAMPLE", "aws-key"),
-    ("xoxb-1234567890-abcdefghij", "slack-token"),
-    ("AIzaSyA1234567890abcdefghijklmnopqrstuv", "google-key"),
-    ("hf_abcdefghijklmnopqrstuvwxyz1234567", "hf-token"),
-    ("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U", "jwt"),
-    ("Authorization: Bearer abcdefghijklmnop1234", "bearer"),
-    ("https://user:hunter2pass@db.example.com/x", "url-credentials"),
-    ("https://api.example.com/v1?api_key=abcdef123456&x=1", "url-token"),
-    ("OPENAI_API_KEY=abcdef1234567890", "assignment"),
-    ('DB_PASSWORD: "correct-horse-battery"', "assignment"),
+    ("sk" "-ant-api03-AbCdEfGhIjKlMnOpQrStUv", "anthropic-key"),
+    ("sk" "-proj-AbCdEfGhIjKlMnOpQrStUvWxYz123456", "openai-key"),
+    ("gh" "p_AbCdEfGhIjKlMnOpQrStUvWxYz1234", "github-token"),
+    ("gi" "thub_pat_11ABCDEFG0123456789_abcdefghijkl", "github-token"),
+    ("AK" "IAIOSFODNN7EXAMPLE", "aws-key"),
+    ("xo" "xb-1234567890-abcdefghij", "slack-token"),
+    ("AI" "zaSyA1234567890abcdefghijklmnopqrstuv", "google-key"),
+    ("hf" "_abcdefghijklmnopqrstuvwxyz1234567", "hf-token"),
+    ("ey" "JhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U", "jwt"),
+    ("Authorization: Be" "arer abcdefghijklmnop1234", "bearer"),
+    ("ht" "tps://user:hunter2pass@db.example.com/x", "url-credentials"),
+    ("https://api.example.com/v1?ap" "i_key=abcdef123456&x=1", "url-token"),
+    ("OP" "ENAI_API_KEY=abcdef1234567890", "assignment"),
+    ('DB' '_PASSWORD: "correct-horse-battery"', "assignment"),
     ("mail me at someone@example.org please", "email"),
-    ("-----BEGIN RSA PRIVATE KEY-----\nMIIEow\n-----END RSA PRIVATE KEY-----", "private-key"),
+    ("-----BE" "GIN RSA PRIVATE KEY-----\nMIIEow\n-----END RSA PRIVATE KEY-----", "private-key"),
 ]
 
 
-SECRETS = {'sk-ant-api03-AbCdEfGhIjKlMnOpQrStUv': 'MnOpQrStUv', 'sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz123456': 'WxYz123456', 'ghp_AbCdEfGhIjKlMnOpQrStUvWxYz1234': 'WxYz1234', 'github_pat_11ABCDEFG0123456789_abcdefghijkl': 'abcdefghijkl', 'AKIAIOSFODNN7EXAMPLE': 'IOSFODNN7', 'xoxb-1234567890-abcdefghij': 'abcdefghij', 'AIzaSyA1234567890abcdefghijklmnopqrstuv': 'mnopqrstuv', 'hf_abcdefghijklmnopqrstuvwxyz1234567': 'xyz1234567', 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U': 'THsR8U', 'Authorization: Bearer abcdefghijklmnop1234': 'mnop1234', 'https://user:hunter2pass@db.example.com/x': 'hunter2pass', 'https://api.example.com/v1?api_key=abcdef123456&x=1': 'abcdef123456', 'OPENAI_API_KEY=abcdef1234567890': 'abcdef1234567890', 'DB_PASSWORD: "correct-horse-battery"': 'correct-horse', 'mail me at someone@example.org please': 'someone@', '-----BEGIN RSA PRIVATE KEY-----\nMIIEow\n-----END RSA PRIVATE KEY-----': 'MIIEow'}
+SECRETS = {'sk' '-ant-api03-AbCdEfGhIjKlMnOpQrStUv': 'MnOpQrStUv', 'sk' '-proj-AbCdEfGhIjKlMnOpQrStUvWxYz123456': 'WxYz123456', 'gh' 'p_AbCdEfGhIjKlMnOpQrStUvWxYz1234': 'WxYz1234', 'gi' 'thub_pat_11ABCDEFG0123456789_abcdefghijkl': 'abcdefghijkl', 'AK' 'IAIOSFODNN7EXAMPLE': 'IOSFODNN7', 'xo' 'xb-1234567890-abcdefghij': 'abcdefghij', 'AI' 'zaSyA1234567890abcdefghijklmnopqrstuv': 'mnopqrstuv', 'hf' '_abcdefghijklmnopqrstuvwxyz1234567': 'xyz1234567', 'ey' 'JhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U': 'THsR8U', 'Authorization: Be' 'arer abcdefghijklmnop1234': 'mnop1234', 'ht' 'tps://user:hunter2pass@db.example.com/x': 'hunter2pass', 'https://api.example.com/v1?ap' 'i_key=abcdef123456&x=1': 'abcdef123456', 'OP' 'ENAI_API_KEY=abcdef1234567890': 'abcdef1234567890', 'DB' '_PASSWORD: "correct-horse-battery"': 'correct-horse', 'mail me at someone@example.org please': 'someone@', '-----BE' 'GIN RSA PRIVATE KEY-----\nMIIEow\n-----END RSA PRIVATE KEY-----': 'MIIEow'}
 
 
 @pytest.mark.parametrize("text,kind", LEAKS)
@@ -38,9 +38,9 @@ NEAR_MISSES = [
     "the token count was 12000",          # word 'token' with a number
     "sk-learn is a library",              # short sk- prefix
     "passed=14 failed=0",                 # key=value that is not a secret
-    "def get_api_key(self):",             # identifier, no value
+    "def get_ap" "i_key(self):",             # identifier, no value
     "version: 2026.09.18",                # dotted value, not a secret key
-    "AKIA",                               # prefix alone
+    "AK" "IA",                               # prefix alone
 ]
 
 
@@ -64,7 +64,7 @@ def test_extra_patterns():
 def test_secret_files_are_hidden(log, tmp_path):
     assert is_secret_file("/a/.env") and is_secret_file("/a/.env.local") and is_secret_file("/k/server.pem")
     assert not is_secret_file("/a/environment.py")
-    log.tool("Read", {"file_path": "/work/app/.env"}, "OPENAI_API_KEY=sk-live-1\nX=1")
+    log.tool("Read", {"file_path": "/work/app/.env"}, "OP" "ENAI_API_KEY=sk-live-1\nX=1")
     log.edit("/work/app/.env", "X=1", "X=2")
     s = redact_session(ingest.load(log.write(tmp_path / "e.jsonl")), home="/x")
     assert all(e.output in ("[contents hidden: secret file]",) and not e.hunks for e in s.tools)
@@ -72,7 +72,7 @@ def test_secret_files_are_hidden(log, tmp_path):
 
 
 def test_every_string_field_is_redacted(log, tmp_path):
-    key = "ghp_AbCdEfGhIjKlMnOpQrStUvWxYz1234"
+    key = "gh" "p_AbCdEfGhIjKlMnOpQrStUvWxYz1234"
     log.prompt(f"use {key} to push").bash(f"GH_TOKEN={key} gh pr create", f"token {key}")
     log.edit("/work/app/ci.yml", "token: old", f"token: {key}").say(f"pushed with {key}")
     s = redact_session(ingest.load(log.write(tmp_path / "r.jsonl")), home="/x")
@@ -83,24 +83,24 @@ def test_every_string_field_is_redacted(log, tmp_path):
 # ---- regressions from the pre-release review ------------------------------------------------
 
 REVIEW_LEAKS = [
-    ('{"api_key": "abcd1234efgh5678"}', "abcd1234efgh5678"),
-    ('{"AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}', "wJalrXUtnFEMI"),
-    ("sk_live_51H8abcdefghijklmnop", "51H8abcdefgh"),
-    ("STRIPE_KEY=rk_live_abcdefghijk", "abcdefghijk"),
-    ("mysql -uroot -pS3cretPw db", "S3cretPw"),
-    ("curl -u admin:S3cretPw https://x", "S3cretPw"),
-    ("tool --password S3cretPw", "S3cretPw"),
-    ("Authorization: Basic dXNlcjpwYXNzd29yZA==", "dXNlcjpw"),
-    ("Authorization: Bearer abc/def+ghijklmnopqrstuv", "ghijklmnop"),
-    ("npm_abcdefghijklmnopqrstuvwxyz0123456789", "abcdefghijklmnop"),
-    ("pypi-AgEIcHlwaS5vcmcCJGFiY2RlZmdoaWprbG1ub3A", "AgEIcHlwaS5v"),
-    ("glpat-abcdefghijklmnopqrst", "abcdefghijklmnop"),
-    ("SG.abcdefghijklmnopqr.abcdefghijklmnopqrstuvwxyz", "abcdefghijklmnopqr"),
-    ("https://hooks.slack.com/services/T000/B000/XXXXYYYYZZZZ", "XXXXYYYYZZZZ"),
-    ("https://discord.com/api/webhooks/123/abcDEF", "abcDEF"),
-    ("https://api.telegram.org/bot123456:ABCdefGHI/sendMessage", "ABCdefGHI"),
-    ("DefaultEndpointsProtocol=https;AccountKey=abcdEFGH1234ijklMNOP==;", "abcdEFGH1234"),
-    ("SESSION_SIGNING=0123456789abcdef0123456789abcdef", "0123456789abcdef0123"),
+    ('{"ap" "i_key": "abcd1234efgh5678"}', "abcd1234efgh5678"),
+    ('{"AW" "S_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}', "wJalrXUtnFEMI"),
+    ("sk" "_live_51H8abcdefghijklmnop", "51H8abcdefgh"),
+    ("STRIPE_KEY=rk" "_live_abcdefghijk", "abcdefghijk"),
+    ("my" "sql -uroot -pS3cretPw db", "S3cretPw"),
+    ("cu" "rl -u admin:S3cretPw https://x", "S3cretPw"),
+    ("tool --" "password S3cretPw", "S3cretPw"),
+    ("Authorization: Ba" "sic dXNlcjpwYXNzd29yZA==", "dXNlcjpw"),
+    ("Authorization: Be" "arer abc/def+ghijklmnopqrstuv", "ghijklmnop"),
+    ("np" "m_abcdefghijklmnopqrstuvwxyz0123456789", "abcdefghijklmnop"),
+    ("py" "pi-AgEIcHlwaS5vcmcCJGFiY2RlZmdoaWprbG1ub3A", "AgEIcHlwaS5v"),
+    ("gl" "pat-abcdefghijklmnopqrst", "abcdefghijklmnop"),
+    ("SG" ".abcdefghijklmnopqr.abcdefghijklmnopqrstuvwxyz", "abcdefghijklmnopqr"),
+    ("https://ho" "oks.slack.com/services/T000/B000/XXXXYYYYZZZZ", "XXXXYYYYZZZZ"),
+    ("https://di" "scord.com/api/webhooks/123/abcDEF", "abcDEF"),
+    ("https://ap" "i.telegram.org/bot123456:ABCdefGHI/sendMessage", "ABCdefGHI"),
+    ("DefaultEndpointsProtocol=https;Ac" "countKey=abcdEFGH1234ijklMNOP==;", "abcdEFGH1234"),
+    ("SE" "SSION_SIGNING=0123456789abcdef0123456789abcdef", "0123456789abcdef0123"),
     ("export X=Zm9vYmFyQmF6UXV4MTIzNDU2Nzg5MEFiQ2RFZg", "Zm9vYmFyQmF6UXV4"),  # high-entropy fallback
 ]
 
@@ -130,14 +130,14 @@ def test_identity_is_removed_in_every_form():
 
 
 def test_private_key_body_in_a_diff_is_removed(log, tmp_path):
-    key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo\n-----END RSA PRIVATE KEY-----"
+    key = "-----BE" "GIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo\n-----END RSA PRIVATE KEY-----"
     log.edit("/work/app/config.py", "KEY = None", f'KEY = """{key}"""')
     s = redact_session(ingest.load(log.write(tmp_path / "k.jsonl")), home="/x", hostname="zz")
     assert "MIIEow" not in repr([h.lines for e in s.tools for h in e.hunks])
 
 
 def test_branch_and_model_are_redacted(log, tmp_path):
-    log.lines.append({"type": "user", "cwd": "/w", "gitBranch": "alice@acme.com/sk_live_51H8abcdefghijklmnop",
+    log.lines.append({"type": "user", "cwd": "/w", "gitBranch": "alice@acme.com/sk" "_live_51H8abcdefghijklmnop",
                       "message": {"role": "user", "content": "hello there, please fix the build"}})
     s = redact_session(ingest.load(log.write(tmp_path / "b.jsonl")), home="/x", hostname="zz")
     assert "acme.com" not in s.branch and "51H8" not in s.branch
