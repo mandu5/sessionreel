@@ -147,3 +147,8 @@ def test_more_secret_files():
     for f in ["/a/.git-credentials", "/a/.envrc", "/a/prod.tfvars", "/a/x.tfstate", "/a/c.p12",
               "/a/k.pfx", "/k/sa-key.json", "/h/.kube/config", "/h/.docker/config.json", "/h/.aws/credentials"]:
         assert is_secret_file(f), f
+
+
+@pytest.mark.parametrize("text", ["\\if@neuripsfinal", "reader-001@session-d90ba878", "eval@NeurIPS results", "npm i pkg@latest"])
+def test_at_signs_that_are_not_shell_prompts_survive(text):
+    assert Redactor(home="/nonexistent", hostname="zz").text(text) == text

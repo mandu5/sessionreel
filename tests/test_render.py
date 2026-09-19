@@ -89,3 +89,7 @@ def test_demo_session_is_bundled_and_tells_an_arc():
     path = resources.files("sessionreel").joinpath("demo", "demo-session.jsonl")
     b = story.build(redact_session(ingest.load(str(path))))
     assert b["arc"] and b["scenes"][0]["title"] == "2 failed → 14 passed"
+
+
+def test_wrap_never_gets_zero_lines():
+    assert render.wrap("short", "ui", 40, 500, max_lines=0) == ["short"]

@@ -44,7 +44,7 @@ PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     ("assignment", re.compile(r"(?i)(?<![A-Za-z0-9])((?:[A-Z0-9.]*[_\-.])?" + _SECRET_WORD + r"(?:[_\-][A-Z0-9_\-]*)?)([\"']?\s*[=:]\s*)([\"']?)(?!\[)(?!\s)(?!(?:Bearer|Basic)\b)[^\s'\",;}\[\](){}]{6,}\3(?=[\s'\",;}\]]|$)"), r"\1\2\3[redacted]\3"),
     ("email", re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"), "[email]"),
     # long mixed-case+digit tokens with no separators: almost always a credential or a hash of one
-    ("high-entropy", re.compile(r"\b(?=[A-Za-z0-9+_=]{32,})(?=[^\s]*[A-Z])(?=[^\s]*[a-z])(?=[^\s]*\d)[A-Za-z0-9+_]{32,}={0,2}"), "[redacted]"),
+    ("high-entropy", re.compile(r"(?<![\w./-])(?=[A-Za-z0-9+]{32,})(?=[^\s]*[A-Z])(?=[^\s]*[a-z])(?=(?:[^\s\d]*\d){3})[A-Za-z0-9+]{32,}={0,2}(?![\w./-])"), "[redacted]"),
 ]
 
 # Per-session scratch dirs are long, noisy and carry session ids; show them as $TMP.
@@ -77,7 +77,8 @@ class Redactor:
         host = (hostname if hostname is not None else socket.gethostname()).split(".")[0]
         if len(host) >= 4 and host.lower() not in {"localhost", "local"}:
             ident.append(("hostname", re.compile(r"(?<![\w-])" + re.escape(host) + r"(?![\w-])", re.I), "host"))
-        ident.append(("user-at-host", re.compile(r"(?<![\w.])[a-z_][a-z0-9_.-]{1,31}@[A-Za-z0-9][A-Za-z0-9-]{2,}(?:\.local)?\b(?!\.[A-Za-z])"), "user@host"))
+        # a shell prompt: user@host followed by a path or prompt sigil ("alice@mbp ~ %", "bob@srv:/x$")
+        ident.append(("user-at-host", re.compile(r"(?<![\w.@\\])[a-z_][a-z0-9_.-]{1,31}@[A-Za-z0-9][A-Za-z0-9-]{2,}(?:\.local)?(?=:[~/]|\s+(?:~|/|%|\$|#))"), "user@host"))
         self.ident = ident
 
     def text(self, s: str) -> str:

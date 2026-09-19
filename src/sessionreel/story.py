@@ -430,11 +430,21 @@ def build(sess: Session, lang: str = "en", max_scenes: int = 9, whole: bool = Fa
     if arc:
         red, green = arc
         scenes.append(term(ev[red.index], red, t["red"].format(badge=_badge(red), family=red.family)))
-        fix = sorted((e for e in ev[red.index:green.index] if e.kind == "tool" and e.tool in _EDITS and e.hunks),
-                     key=lambda e: (not _DOC.search(e.file), sum(_changed(e))), reverse=True)[:2]
+        between = [e for e in ev[red.index:green.index] if e.kind == "tool" and e.tool in _EDITS and e.hunks]
+        red_out = ev[red.index].output
+
+        def named(e: Event) -> bool:
+            """The failure output points at this file (by name), so the edit is plausibly the fix."""
+            base = os.path.basename(e.file)
+            return bool(base) and base in red_out
+
+        fix = sorted(between, key=lambda e: (named(e), not _DOC.search(e.file), sum(_changed(e))), reverse=True)[:2]
         for e in sorted(fix, key=ev.index):
             add, rem = _changed(e)
-            scenes.append(_diff_scene(e, t["fix"].format(file=_short(e.file, 1), add=add, rem=rem)))
+            # Call it the fix only when that is what the log supports: the failure named the file,
+            # or it is the one file changed between red and green.
+            template = t["fix"] if named(e) or len({x.file for x in between}) == 1 else t["edit"]
+            scenes.append(_diff_scene(e, template.format(file=_short(e.file, 1), add=add, rem=rem)))
         scenes.append(term(ev[green.index], green, t["green"].format(badge=_badge(green))))
     else:
         big = sorted(edits, key=lambda ie: (not _DOC.search(ie[1].file), sum(_changed(ie[1]))), reverse=True)[:2]

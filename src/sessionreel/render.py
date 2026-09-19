@@ -110,7 +110,7 @@ def draw_text(d: ImageDraw.ImageDraw, xy: tuple[float, float], text: str, key: s
 
 def wrap(text: str, key: str, size: int, width: float, max_lines: int = 99) -> list[str]:
     """Greedy wrap on spaces; CJK text (no spaces) wraps per character."""
-    return list(_wrap(text, key, size, float(width), max_lines))
+    return list(_wrap(text, key, size, float(width), max(1, max_lines)))
 
 
 @lru_cache(maxsize=4096)

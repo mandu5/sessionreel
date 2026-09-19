@@ -219,3 +219,14 @@ def test_python_dash_m_is_not_a_selector():
     r = story.parse_check(Event("tool", tool="Bash", input={"command": ".venv/bin/python -m pytest -q"},
                                 output="95 passed", has_result=True), 0)
     assert r.selectors == ()
+
+
+def test_fix_caption_only_for_files_the_failure_names(log, tmp_path):
+    log.prompt("Fix the failing parser test and tidy the docs while you are at it")
+    log.bash("pytest -q", "FAILED tests/test_parser.py::test_empty - parser.py:12 IndexError\n1 failed, 3 passed", error=True)
+    log.edit("/work/app/docs/notes.md", "a\nb\nc", "a\nb\nc\nd\ne\nf\ng")
+    log.edit("/work/app/parser.py", "x", "y")
+    log.bash("pytest -q", "4 passed")
+    b = _board(log.write(tmp_path / "fixname.jsonl"))
+    caps = {s["file"]: s["caption"] for s in b["scenes"] if s["kind"] == "diff"}
+    assert caps["parser.py"].startswith("Fix in") and caps["docs/notes.md"].startswith("Changed")
