@@ -30,9 +30,9 @@ SR_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sessionreel.XXXXXX")"
    ```
    With no session argument it uses `CLAUDE_CODE_SESSION_ID` — this session — and falls back to
    the newest session for this directory or its parents. It prints the chosen session id, the
-   ask it found, the story and how many items it redacted. Tell the user which session it is.
-   It prints the story (`title → prompt → terminal → diff → terminal → ship → stats → end`) and
-   how many items were redacted. If the user named another session, pass its id or path.
+   ask it found, the story (`title → prompt → terminal → diff → terminal → ship → stats → end`)
+   and how many items it redacted. Tell the user which session it is. If the user named another
+   session, pass its id or path.
 
 2. **Rewrite the captions — this is the one thing you add.** Read the storyboard. Each scene has
    a template `caption` and a `fact` (the same text, kept for checking). You know what this
