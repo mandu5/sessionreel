@@ -1,11 +1,11 @@
-# sessionreel — design
+# sessionreel: design
 
 ## Problem
 
 A coding agent can work for two hours and leave behind a 30 MB JSONL log. The work is real, but
 nobody else can see it: a teammate will not scrub a transcript, a client will not open a replay
 viewer, and a link on X is not a video. The existing tools (claude-devtools, claude-code-log,
-claude-replay, mindwalk, zoetrope) are *viewers* — the audience has to come to them and spend
+claude-replay, mindwalk, zoetrope) are *viewers*: the audience has to come to them and spend
 minutes. None of them produces the one artifact people actually share: a short video that plays
 inline and tells what happened.
 
@@ -13,13 +13,13 @@ inline and tells what happened.
 
 `sessionreel` turns one agent session into a 30–60 second video that is
 
-1. **true** — every frame is derived from the log (the real prompt, the real diff, the real
+1. **true**: every frame is derived from the log (the real prompt, the real diff, the real
    test output); nothing is invented, including by an LLM;
-2. **interesting** — it tells the story (goal → the failure → the fix → green → shipped), not a
+2. **interesting**: it tells the story (goal → the failure → the fix → green → shipped), not a
    random sample of 400 tool calls;
-3. **safe to post** — secrets, tokens, emails and home paths are redacted before anything is
+3. **safe to post**: secrets, tokens, emails and home paths are redacted before anything is
    drawn, and the report says what was removed;
-4. **free and local** — no API key, no upload, no Node/Chromium; one `uvx` command.
+4. **free and local**: no API key, no upload, no Node/Chromium; one `uvx` command.
 
 Non-goals for v1: live capture, Codex/Cursor logs (adapter interface is in place; Codex is next),
 music, voices other than the OS voice.
@@ -64,15 +64,15 @@ category is printed and stored in the storyboard; `render` refuses a storyboard 
 
 Deterministic. Beats are detected, scored and packed into the time budget:
 
-- **goal** — the first substantive prompt (the ask).
-- **explore** — reads/greps/globs collapsed into one montage ("read 14 files").
-- **red** — a test/build command whose output shows failure (pytest/jest/go/cargo/tsc summary
+- **goal**: the first substantive prompt (the ask).
+- **explore**: reads/greps/globs collapsed into one montage ("read 14 files").
+- **red**: a test/build command whose output shows failure (pytest/jest/go/cargo/tsc summary
   lines, non-zero exit, `is_error`).
-- **fix** — the edits between a red and the next green of the *same* command family.
-- **green** — that command passing.
-- **ship** — `git commit`/`git push`/`gh pr create`/publish commands that succeeded.
-- **result** — the agent's final message, first sentence.
-- **stats** — duration, prompts, tool calls, files changed, lines ±, tests, tokens.
+- **fix**: the edits between a red and the next green of the *same* command family.
+- **green**: that command passing.
+- **ship**: `git commit`/`git push`/`gh pr create`/publish commands that succeeded.
+- **result**: the agent's final message, first sentence.
+- **stats**: duration, prompts, tool calls, files changed, lines ±, tests, tokens.
 
 The red→fix→green arc is the spine: if the session has one, the reel is built around the most
 recent complete arc. Otherwise the largest edits carry the middle. Captions are templated from the
@@ -82,7 +82,7 @@ not show.
 ### captions
 
 Default: templates (offline, zero cost). Plugin mode: the agent that did the work rewrites the
-captions in `storyboard.json` — it has the context, and it runs inside the user's own session, so
+captions in `storyboard.json`. It has the context, and it runs inside the user's own session, so
 no extra API key or upload exists. The renderer does not care who wrote a caption; `plan` stores
 the template caption as `fact` next to it so a rewrite can be checked against the source.
 

@@ -1,28 +1,28 @@
-# Launch copy — sessionreel 0.1.0
+# Launch copy: sessionreel 0.1.0
 
 Rules learned from 2026 data (see the author's research notes): the video is the post; the
 number goes in line one; post where the audience already is; answer the three standard attacks
 ("what's the use case", "it's a screen recording", "prove it") in the first reply.
 
-## X / Threads (English) — attach docs/demo.mp4 natively, not a link
+## X / Threads (English): attach docs/demo.mp4 natively, not a link
 
 > My coding agent fixed a bug in 2 minutes. Showing someone took 20.
 >
-> So I built sessionreel: one command turns a Claude Code session log into a 35-second video —
+> So I built sessionreel: one command turns a Claude Code session log into a 35-second video:
 > the ask, the failing test, the diff, green, shipped. Local, secrets redacted, no API key.
 >
 > uvx sessionreel
 > github.com/mandu5/sessionreel
 
 Reply 1 (answer the attacks up front):
-> Not a screen recording — every frame is drawn from the log Claude Code already writes
+> Not a screen recording: every frame is drawn from the log Claude Code already writes
 > (~/.claude/projects). You can make a reel of a session from last month. Nothing is uploaded;
 > redaction runs before anything is drawn. Watch it before you post it.
 
-## GeekNews (Show GN) — first-person, story first
+## GeekNews (Show GN): first-person, story first
 
 Title (site prepends "Show GN:"):
-> sessionreel – Claude Code 세션 로그를 35초 영상으로 만드는 도구
+> sessionreel: Claude Code 세션 로그를 35초 영상으로 만드는 도구
 
 Body:
 > 에이전트가 두 시간 동안 버그를 고쳤는데, 그걸 팀에 보여주려면 30 MB짜리 로그를 넘겨줄 수밖에
@@ -37,14 +37,14 @@ Body:
 > - 긴 세션은 그중 한 에피소드만, 한국어 자막(`--lang ko`), 쇼츠용 세로(`--format tall`), OS 음성 내레이션
 > - Claude Code 플러그인으로 쓰면 작업한 에이전트가 자막을 직접 다듬음 (`/reel`)
 >
-> 로그만 있으면 한 달 전 세션도 영상으로 만들 수 있습니다. 올리기 전에 한 번은 꼭 보세요 —
+> 로그만 있으면 한 달 전 세션도 영상으로 만들 수 있습니다. 올리기 전에 한 번은 꼭 보세요,
 > 가리기는 패턴 기반입니다.
 
-## Hacker News — NOT from the author's account (karma 1, auto-flagged before)
+## Hacker News: NOT from the author's account (karma 1, auto-flagged before)
 
 If someone else posts: title
 > sessionreel: turn a Claude Code session log into a 35-second video
 
-## r/ClaudeAI / r/ClaudeCode — video post
+## r/ClaudeAI / r/ClaudeCode: video post
 
 > I made a CLI that turns a Claude Code session into a 35-second recap video (local, redacted)

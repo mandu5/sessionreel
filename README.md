@@ -20,7 +20,7 @@ Agent sessions are real work that nobody else can see. A teammate will not scrub
 transcript, a client will not open a replay viewer, and a link on X is not a video. The tools
 that exist are viewers (you go to them); sessionreel makes the thing you send.
 
-What a reel is built from — all of it straight from the log:
+What a reel is built from: all of it straight from the log:
 
 | scene | source in the log |
 |---|---|
@@ -33,8 +33,8 @@ What a reel is built from — all of it straight from the log:
 | numbers | active time (breaks over 15 min don't count), tool calls, files and lines changed, tests |
 
 No arc in the session? The reel is built from the largest edits instead. A long session with
-many unrelated tasks? The reel tells one episode — from the ask that led to the fix up to the
-next ask — so it doesn't end on another task's summary (`--whole` to override).
+many unrelated tasks? The reel tells one episode: from the ask that led to the fix up to the
+next ask, so it doesn't end on another task's summary (`--whole` to override).
 
 ## Install
 
@@ -47,7 +47,7 @@ uvx --from git+https://github.com/mandu5/sessionreel sessionreel   # latest main
 Python 3.10+. ffmpeg is used if it's on your PATH, otherwise the bundled static build from
 `imageio-ffmpeg`. Fonts are bundled (JetBrains Mono, Inter, Pretendard for Hangul, Noto Emoji).
 
-**As a Claude Code plugin** — the agent that did the work writes the captions:
+**As a Claude Code plugin**, the agent that did the work writes the captions:
 
 ```
 /plugin marketplace add mandu5/sessionreel
@@ -64,7 +64,7 @@ scene data supports), and renders. Or `npx skills add mandu5/sessionreel`.
 sessionreel                          # this session inside Claude Code; else the newest one for this directory
 sessionreel 5e55a0d0                 # a session id prefix, or a path to a .jsonl
 sessionreel list                     # recent sessions: id, time, prompts, tool calls, project
-sessionreel demo                     # a bundled sample session — no logs needed
+sessionreel demo                     # a bundled sample session, no logs needed
 
 sessionreel --format wide            # 1920×1080   (square 1080×1080 is the default; tall 1080×1920)
 sessionreel --lang ko                # Korean captions
@@ -91,14 +91,14 @@ sees the original strings, and it runs **again at render time** over every strin
 storyboard, so a caption edited by you or by an agent is checked too. It removes:
 
 - provider keys and tokens (Anthropic, OpenAI, Stripe, GitHub, GitLab, npm, PyPI, AWS, Slack,
-  SendGrid, Twilio, Google, Hugging Face), JWTs, bearer/basic auth, private-key blocks — also
-  when they span lines inside a diff — webhook URLs, credentials and tokens in URLs;
+  SendGrid, Twilio, Google, Hugging Face), JWTs, bearer/basic auth, private-key blocks, also
+  when they span lines inside a diff, webhook URLs, credentials and tokens in URLs;
 - `SECRET=value`, `"api_key": "…"`, `--password …`, `mysql -p…`, `curl -u user:pass`;
 - long high-entropy strings that look like credentials;
 - your identity: home directory (→ `~`, including Claude Code's `-Users-you-…` form), username,
   hostname, `user@host` prompts, e-mail addresses;
 - the contents of `.env*`, `*.pem`, `*.key`, `*.p12`, `*.tfvars`, `.git-credentials`,
-  kube/docker/AWS credential files — never shown at all.
+  kube/docker/AWS credential files, never shown at all.
 
 `plan` prints how many items were removed, by kind. `--project NAME` replaces the directory name
 shown on every frame and `--no-branch` hides the git branch. Captions whose numbers do not appear
@@ -121,7 +121,7 @@ claims the scene data doesn't support, and each scene keeps its original `fact`.
 kinds, so another log format is one adapter; Codex is next. PRs welcome.
 
 **How is this different from claude-replay, mindwalk, zoetrope, claude-code-log?** Those are
-viewers — interactive pages or TUIs you open and explore. sessionreel produces a 30–60 second
+viewers: interactive pages or TUIs you open and explore. sessionreel produces a 30–60 second
 video that plays inline wherever you post it.
 
 ## How it works

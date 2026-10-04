@@ -1,6 +1,6 @@
 ---
 name: sessionreel
-description: Turn the current (or a named) Claude Code session into a short recap video — the ask, the failing check, the fix, the green run, what shipped — rendered locally to mp4 with secrets redacted. Use when the user asks for a video, reel, recap, demo clip, "show what you did", something to post on X/LinkedIn, or a visual summary of the session for a teammate or client.
+description: Turn the current (or a named) Claude Code session into a short recap video: the ask, the failing check, the fix, the green run, what shipped. Rendered locally to mp4 with secrets redacted. Use when the user asks for a video, reel, recap, demo clip, "show what you did", something to post on X/LinkedIn, or a visual summary of the session for a teammate or client.
 license: MIT
 metadata:
   version: "0.1"
@@ -28,18 +28,18 @@ SR_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sessionreel.XXXXXX")"
    ```
    uvx sessionreel@0.1.0 plan -o "$SR_DIR/storyboard.json" [--lang ko] [--whole] [--project NAME] [--no-branch]
    ```
-   With no session argument it uses `CLAUDE_CODE_SESSION_ID` — this session — and falls back to
+   With no session argument it uses `CLAUDE_CODE_SESSION_ID`, this session, and falls back to
    the newest session for this directory or its parents. It prints the chosen session id, the
    ask it found, the story (`title → prompt → terminal → diff → terminal → ship → stats → end`)
    and how many items it redacted. Tell the user which session it is. If the user named another
    session, pass its id or path.
 
-2. **Rewrite the captions — this is the one thing you add.** Read the storyboard. Each scene has
+2. **Rewrite the captions. This is the one thing you add.** Read the storyboard. Each scene has
    a template `caption` and a `fact` (the same text, kept for checking). You know what this
    session was about; the template does not. Rewrite `caption` for the `prompt`, `terminal`,
    `diff`, `ship` and `say` scenes into short, specific headlines a stranger would understand:
    - at most ~60 characters; plain words; wrap code names in backticks;
-   - **only claims the scene data supports** — the numbers, file names and outcomes already in
+   - **only claims the scene data supports**: the numbers, file names and outcomes already in
      that scene or its `fact`. Never invent a number, a result, a speed-up or a user impact;
    - keep the red scene's failure count and the green scene's pass count exactly as given;
    - do not add names, emails, URLs, paths or anything the redactor removed.
@@ -52,7 +52,7 @@ SR_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sessionreel.XXXXXX")"
    ```
    Keep the video out of the repository so a later `git add -A` cannot commit it. The renderer
    re-runs redaction over the edited storyboard and prints a warning for any caption number it
-   cannot find in that scene's data — if it warns, fix the caption and render again.
+   cannot find in that scene's data, if it warns, fix the caption and render again.
    Formats: `square` (default, feeds), `wide` (1920×1080), `tall` (1080×1920). `--voice` adds
    narration with the OS voice; `--gif` also writes a GIF. Rendering takes roughly as long as the
    video.
