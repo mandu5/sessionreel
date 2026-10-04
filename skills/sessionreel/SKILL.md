@@ -13,8 +13,8 @@ that log, finds the story (most often: a test or build goes red, edits fix it, i
 ships), redacts secrets, and renders a 30–60 second video with Pillow + ffmpeg. No network, no
 model call, no upload.
 
-Run it as `uvx sessionreel@0.1.0 …` (pinned; or `sessionreel …` if the user installed it). If PyPI
-is unreachable, use `uvx --from git+https://github.com/mandu5/sessionreel@v0.1.0 sessionreel …`.
+Run it as `uvx sessionreel@0.1.1 …` (pinned; or `sessionreel …` if the user installed it). If PyPI
+is unreachable, use `uvx --from git+https://github.com/mandu5/sessionreel@v0.1.1 sessionreel …`.
 Never run an unpinned package name from this skill.
 
 Use one scratch directory for the whole run, outside the repository:
@@ -26,7 +26,7 @@ SR_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sessionreel.XXXXXX")"
 
 1. **Plan.** From the project directory:
    ```
-   uvx sessionreel@0.1.0 plan -o "$SR_DIR/storyboard.json" [--lang ko] [--whole] [--project NAME] [--no-branch]
+   uvx sessionreel@0.1.1 plan -o "$SR_DIR/storyboard.json" [--lang ko] [--whole] [--project NAME] [--no-branch]
    ```
    With no session argument it uses `CLAUDE_CODE_SESSION_ID`, this session, and falls back to
    the newest session for this directory or its parents. It prints the chosen session id, the
@@ -48,7 +48,7 @@ SR_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sessionreel.XXXXXX")"
 
 3. **Render.**
    ```
-   uvx sessionreel@0.1.0 render "$SR_DIR/storyboard.json" -o "$SR_DIR/sessionreel.mp4" [--format …] [--voice] [--gif]
+   uvx sessionreel@0.1.1 render "$SR_DIR/storyboard.json" -o "$SR_DIR/sessionreel.mp4" [--format …] [--voice] [--gif]
    ```
    Keep the video out of the repository so a later `git add -A` cannot commit it. The renderer
    re-runs redaction over the edited storyboard and prints a warning for any caption number it

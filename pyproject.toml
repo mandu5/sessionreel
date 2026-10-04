@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sessionreel"
-version = "0.1.0"
+version = "0.1.1"
 description = "Turn a Claude Code session log into a 30-60 second recap video. Local, redacted, no API key."
 readme = "README.md"
 license = "MIT"
